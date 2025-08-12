@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Jogo dos Círculos</title>
   <style>
-    :root { --bg:#0f2530; --fg:#e8f6ff; --accent:#7dfac3; --chip:#0c1b23; --chip-b:#12313f }
+    :root { --bg:#0f2530; --fg:#e8f6ff; --accent:#7dfac3; --chip:#0c1b23; --chip-b:#12313f; --grad1:#103848; --grad2:#09161d; --grad3:#071118 }
     * { box-sizing:border-box }
     body { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,Segoe UI,Roboto,Arial }
     header { text-align:center; padding:24px 16px }
@@ -13,7 +13,7 @@
     .hud { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; opacity:.95 }
     .chip { background:var(--chip); padding:8px 14px; border-radius:999px; border:1px solid var(--chip-b); display:flex; gap:6px; align-items:center }
     .wrap { display:grid; place-items:center; padding:16px }
-    canvas { width:min(1000px, 94vw); height:min(560px, 64vh); border-radius:16px; box-shadow:0 10px 26px rgba(0,0,0,.35); background:radial-gradient(1200px 600px at 10% 10%, #103848 0, #09161d 55%, #071118 100%) }
+    canvas { width:min(1000px, 94vw); height:min(560px, 64vh); border-radius:16px; box-shadow:0 10px 26px rgba(0,0,0,.35); background:radial-gradient(1200px 600px at 10% 10%, var(--grad1) 0, var(--grad2) 55%, var(--grad3) 100%) }
     .btn { appearance:none; border:0; background:var(--accent); color:#072224; padding:12px 18px; border-radius:12px; font-weight:700; cursor:pointer; transition:transform .12s ease, filter .2s;
            box-shadow:0 6px 18px rgba(125,250,195,.25) }
     .btn:active { transform:translateY(1px) }
@@ -37,6 +37,17 @@
       <div class="chip">⭐ <b>Pontos:</b> <span id="p">0</span></div>
       <div class="chip">🎯 <b>Acertos:</b> <span id="h">0</span> • <b>Erros:</b> <span id="m">0</span></div>
       <div class="chip">⚙️ <b>Dificuldade:</b> <span id="dlabel">Normal</span></div>
+      <label class="chip" style="gap:8px">🎨 Tema
+        <select id="theme">
+          <option value="auto">Automático</option>
+          <option value="neon">Neon</option>
+          <option value="halloween">Halloween</option>
+          <option value="natal">Natal</option>
+          <option value="retro">Retrô</option>
+          <option value="inverno">Inverno</option>
+          <option value="carnaval">Carnaval</option>
+        </select>
+      </label>
     </div>
     <p style="opacity:.8;margin:10px 0 0">Clique nos círculos brilhantes para ganhar pontos. Desvie dos vermelhos!</p>
     <div class="controls">
@@ -53,7 +64,7 @@
   </header>
 
   <div class="wrap"><canvas id="game" width="1024" height="576"></canvas></div>
-  <footer>Feito para rodar feliz no GitHub Pages 😎 — agora com <b>sons</b>, <b>ranking local</b>, <b>explosões</b> e <b>modo difícil</b>.</footer>
+  <footer>Feito para rodar feliz no GitHub Pages 😎 — com <b>sons</b>, <b>ranking</b>, <b>explosões</b>, <b>modo difícil</b> e <b>temas sazonais</b>.</footer>
 
   <dialog id="dlg">
     <h3 style="margin:0 0 8px">🏆 Ranking local (top 10)</h3>
@@ -67,7 +78,7 @@
   <script>
     // ===== Util =====
     const cvs = document.getElementById('game'), ctx = cvs.getContext('2d');
-    const ui = { t: q('#t'), p: q('#p'), h: q('#h'), m: q('#m'), dlabel:q('#dlabel'), start: q('#start'), share:q('#share'), board:q('#board'), diff:q('#diff') };
+    const ui = { t: q('#t'), p: q('#p'), h: q('#h'), m: q('#m'), dlabel:q('#dlabel'), start: q('#start'), share:q('#share'), board:q('#board'), diff:q('#diff'), theme:q('#theme') };
     const dlg = q('#dlg'), tbl=q('#tbl'), btnClose=q('#close'), btnReset=q('#reset');
     const DPR = window.devicePixelRatio || 1; fitCanvas();
 
@@ -77,16 +88,58 @@
     const rand=(a,b)=>Math.random()*(b-a)+a;
     const now=()=>performance.now();
 
-    // ===== Áudio (WebAudio, sem arquivos externos) =====
+    // ===== Temas =====
+    const THEMES = {
+      neon:   { bg:'#0f2530', fg:'#e8f6ff', accent:'#7dfac3', chip:'#0c1b23', chipB:'#12313f', grad:['#103848','#09161d','#071118'], good:[140,170], bad:[350,10] },
+      halloween: { bg:'#0d0b10', fg:'#ffe7c2', accent:'#ff8a00', chip:'#1a1417', chipB:'#3c2a2f', grad:['#27131a','#0f0a10','#0a070b'], good:[25,45], bad:[330,360] },
+      natal:  { bg:'#04140e', fg:'#f7fff9', accent:'#69e6a6', chip:'#0a2a1f', chipB:'#154434', grad:['#0d3a2b','#072219','#04140e'], good:[120,150], bad:[350,10] },
+      retro:  { bg:'#1a1426', fg:'#ffe8ff', accent:'#ff71e0', chip:'#2a1d3d', chipB:'#4a2b6a', grad:['#3a1f5a','#201432','#130c20'], good:[270,310], bad:[30,50] },
+      inverno:{ bg:'#0a1824', fg:'#e9f6ff', accent:'#86d2ff', chip:'#0e2635', chipB:'#164056', grad:['#12394d','#0b1e2b','#08121a'], good:[190,210], bad:[350,10] },
+      carnaval:{ bg:'#0c1222', fg:'#f2f6ff', accent:'#ffd23f', chip:'#0f1a33', chipB:'#1d2a55', grad:['#1a2a5a','#0f1838','#0a1124'], good:[50,360], bad:[330,10] }
+    };
+
+    function pickAutoTheme(d=new Date){
+      const m=d.getMonth()+1, day=d.getDate();
+      if(m===10 && day>=15) return 'halloween';
+      if(m===12) return 'natal';
+      if(m===2)  return 'carnaval';
+      if(m===6||m===7) return 'retro'; // vibe neon retrô no meio do ano
+      if(m===7||m===8) return 'inverno'; // BR: inverno (aprox.)
+      return 'neon';
+    }
+
+    function applyTheme(name){
+      const t = THEMES[name] || THEMES.neon; const r = document.documentElement.style;
+      r.setProperty('--bg', t.bg); r.setProperty('--fg', t.fg); r.setProperty('--accent', t.accent); r.setProperty('--chip', t.chip); r.setProperty('--chip-b', t.chipB);
+      r.setProperty('--grad1', t.grad[0]); r.setProperty('--grad2', t.grad[1]); r.setProperty('--grad3', t.grad[2]);
+      currentTheme = name; goodHue=t.good; badHue=t.bad;
+    }
+
+    let currentTheme='neon', goodHue=[140,170], badHue=[350,10];
+    function colorGood(){ const [a,b]=goodHue; return `hsl(${rand(a,b)},100%,${rand(55,70)}%)`; }
+    function colorBad(){ const [a,b]=badHue; const hue = a<b? rand(a,b) : (Math.random()<((360-a)/(360-a+b))? rand(a,360): rand(0,b)); return `hsl(${hue},95%,${rand(50,65)}%)`; }
+
+    // definir tema inicial
+    (function initTheme(){
+      const saved = localStorage.getItem('circles_theme_v1') || 'auto';
+      ui.theme.value = saved;
+      const key = saved==='auto' ? pickAutoTheme(new Date()) : saved;
+      applyTheme(key);
+    })();
+
+    ui.theme.addEventListener('change', ()=>{
+      const val = ui.theme.value; localStorage.setItem('circles_theme_v1', val);
+      const key = val==='auto' ? pickAutoTheme(new Date()) : val;
+      applyTheme(key);
+    });
+
+    // ===== Áudio =====
     let actx; const ensureAudio=()=>{ if(!actx){ actx = new (window.AudioContext||window.webkitAudioContext)(); }};
     function beep(freq=440, type='sine', duration=0.08, vol=0.15){ try{ ensureAudio(); const o=actx.createOscillator(), g=actx.createGain(); o.type=type; o.frequency.value=freq; o.connect(g); g.connect(actx.destination); g.gain.value=vol; o.start(); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+duration); o.stop(actx.currentTime+duration); }catch(e){} }
     const sfx = { good:()=>{ beep(740,'sine',0.07,0.18); beep(980,'sine',0.09,0.12); }, bad:()=>{ beep(180,'square',0.1,0.18); }, miss:()=>{ beep(260,'sawtooth',0.06,0.12); }, end:()=>{ beep(520,'triangle',0.2,0.2);} };
 
     // ===== Estado do jogo =====
     let circles=[], particles=[]; let score=0, hits=0, miss=0, time=60, playing=false, last=0, timerId; let level=1;
-
-    function colorGood(){ return `hsl(${rand(140,170)},100%,${rand(55,70)}%)` }
-    function colorBad(){ return `hsl(${rand(350,10)},95%,${rand(50,65)}%)` }
 
     function spawn(){
       const hard = ui.diff.value==='hard';
@@ -110,13 +163,12 @@
       clearInterval(timerId);
       timerId = setInterval(()=>{ time--; ui.t.textContent=time; if(time<=0) stop(); else { level = Math.floor((60-time)/6)+1; spawn(); if(Math.random()<0.6) spawn(); } },1000);
       last = now(); requestAnimationFrame(loop);
-      ensureAudio();
     }
 
     function stop(){
       playing=false; clearInterval(timerId); sfx.end();
-      saveScore({score,hits,miss,mode:ui.diff.value,ts:Date.now()});
-      alert(`Fim! Pontos: ${score} • Acertos: ${hits} • Erros: ${miss} • Modo: ${ui.diff.value==='hard'?'Difícil':'Normal'}`);
+      saveScore({score,hits,miss,mode:ui.diff.value,ts:Date.now(),theme:currentTheme});
+      alert(`Fim! Pontos: ${score} • Acertos: ${hits} • Erros: ${miss} • Modo: ${ui.diff.value==='hard'?'Difícil':'Normal'} • Tema: ${currentTheme}`);
       renderBoard();
     }
 
@@ -137,8 +189,7 @@
 
       // render
       ctx.clearRect(0,0,cvs.width,DPR?cvs.height:576);
-      // leve textura
-      for(let i=0;i<10;i++){ ctx.globalAlpha=0.02; ctx.fillStyle='#0b2130'; ctx.fillRect(rand(0,cvs.width), rand(0,cvs.height), rand(40,140), rand(2,6)); }
+      for(let i=0;i<10;i++){ ctx.globalAlpha=0.02; ctx.fillStyle='rgba(11,33,48,1)'; ctx.fillRect(rand(0,cvs.width), rand(0,cvs.height), rand(40,140), rand(2,6)); }
       ctx.globalAlpha=1;
       for(const c of circles){
         ctx.beginPath(); ctx.arc(c.x,c.y,c.r,0,Math.PI*2);
@@ -157,9 +208,7 @@
       if(playing) requestAnimationFrame(loop);
     }
 
-    function explode(x,y,color){
-      for(let i=0;i<18;i++) particles.push({ x, y, r: rand(1,2.2), vx: rand(-2.2,2.2), vy: rand(-2.2,2.2), life: 1, color });
-    }
+    function explode(x,y,color){ for(let i=0;i<18;i++) particles.push({ x, y, r: rand(1,2.2), vx: rand(-2.2,2.2), vy: rand(-2.2,2.2), life: 1, color }); }
 
     cvs.addEventListener('click', e=>{
       if(!playing) return;
@@ -181,12 +230,12 @@
     ui.diff.addEventListener('change', ()=>{ ui.dlabel.textContent = ui.diff.options[ui.diff.selectedIndex].text; });
 
     // ===== Ranking local =====
-    const LSKEY='circles_scores_v2';
+    const LSKEY='circles_scores_v3';
     function loadScores(){ try{ return JSON.parse(localStorage.getItem(LSKEY)||'[]'); }catch(e){ return []; } }
     function saveScore(obj){ const arr=loadScores(); arr.push(obj); arr.sort((a,b)=>b.score-a.score); const top=arr.slice(0,10); localStorage.setItem(LSKEY, JSON.stringify(top)); }
     function renderBoard(){ const arr=loadScores(); if(!arr.length){ tbl.innerHTML='<tr><td>Nenhum resultado salvo ainda.</td></tr>'; } else {
-        tbl.innerHTML='<tr><th>#</th><th>Pontos</th><th>Acertos</th><th>Erros</th><th>Modo</th><th class="right">Quando</th></tr>' +
-          arr.map((r,i)=>`<tr><td>${i+1}</td><td>${r.score}</td><td>${r.hits??'-'}</td><td>${r.miss??'-'}</td><td>${r.mode==='hard'?'Difícil':'Normal'}</td><td class="right">${new Date(r.ts).toLocaleString()}</td></tr>`).join(''); }
+        tbl.innerHTML='<tr><th>#</th><th>Pontos</th><th>Acertos</th><th>Erros</th><th>Modo</th><th>Tema</th><th class="right">Quando</th></tr>' +
+          arr.map((r,i)=>`<tr><td>${i+1}</td><td>${r.score}</td><td>${r.hits??'-'}</td><td>${r.miss??'-'}</td><td>${r.mode==='hard'?'Difícil':'Normal'}</td><td>${r.theme||'-'}</td><td class="right">${new Date(r.ts).toLocaleString()}</td></tr>`).join(''); }
       if(!dlg.open) dlg.showModal(); }
     ui.board.addEventListener('click', renderBoard);
     btnClose.addEventListener('click', ()=> dlg.close());
@@ -194,7 +243,7 @@
 
     // ===== Compartilhar =====
     ui.share.addEventListener('click', async ()=>{
-      const text=`Acertei ${hits} e fiz ${score} pontos no Jogo dos Círculos (${ui.diff.value==='hard'?'Difícil':'Normal'}). Tenta bater!`;
+      const text=`Acertei ${hits} e fiz ${score} pontos no Jogo dos Círculos (${ui.diff.value==='hard'?'Difícil':'Normal'} • tema ${currentTheme}). Tenta bater!`;
       const url=location.href;
       try{
         if(navigator.share){ await navigator.share({ title:'Jogo dos Círculos', text, url }); }
