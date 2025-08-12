@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jogo dos Círculos</title>
+  <style>
+    :root { --bg:#0f2530; --fg:#e8f6ff; --accent:#7dfac3; }
+    * { box-sizing:border-box }
+    body { margin:0; background:var(--bg); color:var(--fg); font-family:system-ui,Segoe UI,Roboto,Arial }
+    header { text-align:center; padding:24px 16px }
+    h1 { margin:0 0 8px; font-weight:800; letter-spacing:.3px }
+    .hud { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; opacity:.9 }
+    .chip { background:#0c1b23; padding:8px 14px; border-radius:999px; border:1px solid #12313f }
+    .wrap { display:grid; place-items:center; padding:16px }
+    canvas { width:min(900px, 94vw); height:min(520px, 62vh); border-radius:16px; box-shadow:0 10px 26px rgba(0,0,0,.35); background:radial-gradient(1200px 600px at 10% 10%, #103848 0, #09161d 55%, #071118 100%) }
+    .btn { appearance:none; border:0; background:var(--accent); color:#072224; padding:12px 18px; border-radius:12px; font-weight:700; cursor:pointer; transition:transform .12s ease;
+           box-shadow:0 6px 18px rgba(125,250,195,.25) }
+    .btn:active { transform:translateY(1px) }
+    footer { text-align:center; opacity:.6; font-size:12px; padding:8px 0 18px }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Jogo dos Círculos</h1>
+    <div class="hud">
+      <div class="chip">⏱️ Tempo: <span id="t">60</span>s</div>
+      <div class="chip">⭐ Pontos: <span id="p">0</span></div>
+      <div class="chip">🎯 Acertos: <span id="h">0</span> / Erros: <span id="m">0</span></div>
+    </div>
+    <p style="opacity:.8;margin:10px 0 0">Clique nos círculos brilhantes para ganhar pontos. Desvie dos vermelhos!</p>
+    <div style="margin:14px 0 0"><button id="start" class="btn">Começar</button></div>
+  </header>
+
+  <div class="wrap"><canvas id="game" width="960" height="540"></canvas></div>
+  <footer>Feito para rodar feliz no GitHub Pages 😎</footer>
+
+  <script>
+    const cvs = document.getElementById('game'), ctx = cvs.getContext('2d');
+    const ui = { t: q('#t'), p: q('#p'), h: q('#h'), m: q('#m'), start: q('#start') };
+    const DPR = window.devicePixelRatio || 1; fitCanvas();
+
+    let circles = [], score = 0, hits = 0, miss = 0, time = 60, playing = false, lastTime = 0, timerId;
+
+    function q(s){ return document.querySelector(s) }
+    function fitCanvas(){
+      const w = cvs.width, h = cvs.height;
+      if (DPR !== 1){ cvs.width = w*DPR; cvs.height = h*DPR; cvs.style.width = w+'px'; cvs.style.height = h+'px'; ctx.setTransform(DPR,0,0,DPR,0,0); }
+    }
+
+    function rand(a,b){ return Math.random()*(b-a)+a }
+    function colorGood(){ return `hsl(${rand(140,170)},100%,${rand(55,70)}%)` }
+    function colorBad(){ return `hsl(${rand(350,10)},95%,${rand(50,65)}%)` }
+
+    function spawn(level=1){
+      // verdes valem ponto, vermelhos tiram ponto
+      const isBad = Math.random() < Math.min(.15 + level*.03, .45);
+      const r = rand(14, 26 + level*2);
+      const obj = {
+        x: rand(r, cvs.width/DPR - r), y: rand(r, cvs.height/DPR - r),
+        r, vx: rand(-1.2-level*.15, 1.2+level*.15), vy: rand(-1.2-level*.15, 1.2+level*.15),
+        life: 3 + level*.25, bad: isBad, glow: 0
+      };
+      circles.push(obj);
+    }
+
+    function start(){
+      circles = []; score=0; hits=0; miss=0; time=60; playing=true; ui.p.textContent=0; ui.h.textContent=0; ui.m.textContent=0; ui.t.textContent=60;
+      for(let i=0;i<8;i++) spawn();
+      clearInterval(timerId);
+      timerId = setInterval(()=>{ time--; ui.t.textContent=time; if(time<=0) stop(); else spawn(Math.floor(60-time)/6+1);},1000);
+      lastTime = performance.now(); requestAnimationFrame(loop);
+    }
+
+    function stop(){
+      playing=false; clearInterval(timerId);
+      alert(`Fim! Pontos: ${score} • Acertos: ${hits} • Erros: ${miss}`);
+    }
+
+    function loop(now){
+      const dt = Math.min(33,(now-lastTime))/16.67; lastTime=now;
+      // física
+      for(const c of circles){
+        c.x += c.vx*dt; c.y += c.vy*dt; c.glow = Math.max(0, c.glow - 0.05*dt);
+        if(c.x<c.r||c.x>cvs.width/DPR-c.r) c.vx*=-1;
+        if(c.y<c.r||c.y>cvs.height/DPR-c.r) c.vy*=-1;
+        c.life -= 0.015*dt;
+      }
+      circles = circles.filter(c=>c.life>0);
+      if (circles.length < 10) spawn(Math.floor(60-time)/6+1);
+      // render
+      ctx.clearRect(0,0,cvs.width,DPR?cvs.height:540);
+      for(const c of circles){
+        ctx.beginPath(); ctx.arc(c.x,c.y,c.r,0,Math.PI*2);
+        const grad = ctx.createRadialGradient(c.x,c.y,2,c.x,c.y,c.r*1.4);
+        const col = c.bad ? colorBad() : colorGood();
+        grad.addColorStop(0,'#ffffff'); grad.addColorStop(.25,col); grad.addColorStop(1,'rgba(0,0,0,.15)');
+        ctx.fillStyle = grad; ctx.fill();
+        ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, c.glow));
+        ctx.beginPath(); ctx.arc(c.x,c.y,c.r*1.7,0,Math.PI*2); ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.stroke();
+        ctx.restore();
+      }
+      if(playing) requestAnimationFrame(loop);
+    }
+
+    cvs.addEventListener('click', e=>{
+      if(!playing) return;
+      const rect = cvs.getBoundingClientRect();
+      const x = (e.clientX - rect.left), y = (e.clientY - rect.top);
+      let hit = false;
+      for(const c of circles){
+        const dx=x-c.x, dy=y-c.y; if(dx*dx+dy*dy <= c.r*c.r){
+          hit = true; c.life = 0; c.glow = 1.0;
+          if(c.bad){ score = Math.max(0, score-2); miss++; } else { score += 3; hits++; }
+          ui.p.textContent = score; ui.h.textContent = hits; ui.m.textContent = miss;
+          break;
+        }
+      }
+      if(!hit){ score = Math.max(0, score-1); ui.p.textContent=score; }
+    });
+
+    ui.start.addEventListener('click', ()=> start());
+  </script>
+</body>
+</html>
